@@ -5,11 +5,8 @@ from collections.abc import ItemsView, Iterable, Iterator, KeysView, Mapping, Va
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self, override
 
-_KT = Any
-_VT = Any
 
-
-class TTLDict(UserDict):
+class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
     def __init__(
         self,
         ttl: timedelta,
@@ -63,7 +60,7 @@ class TTLDict(UserDict):
         return self.cleanup_by_key(key)
 
     @override
-    def get(self, key: _KT, default: _VT | None = None) -> _VT | None:
+    def get(self, key: _KT, default: Any = None) -> Any:
         self.cleanup_by_key(key)
         return super().get(key, default)
 
@@ -83,7 +80,7 @@ class TTLDict(UserDict):
         super().clear()
 
     @override
-    def pop(self, key: _KT, default: _VT | None = None) -> _VT | None:
+    def pop(self, key: _KT, default: Any = None) -> Any:
         if not self.expiries.pop(key):
             return default
 
@@ -109,7 +106,7 @@ class TTLDict(UserDict):
         super().__setitem__(key, value)
 
     @override
-    def setdefault(self, key: _KT, default: _VT | None = None) -> _VT | None:
+    def setdefault(self, key: _KT, default: Any = None) -> Any:
         self.expiries[key] = datetime.now(UTC) + self.__ttl
         return super().setdefault(key, default)
 
@@ -123,6 +120,8 @@ class TTLDict(UserDict):
         expiry: datetime = datetime.now(UTC) + self.__ttl
         other_ttl_dict: bool = isinstance(other, TTLDict)
 
+        key: _KT
+        value: _VT
         if isinstance(other, Mapping):
             for key, value in other.items():
                 self.expiries[key] = other.expiries[key] if other_ttl_dict else expiry
