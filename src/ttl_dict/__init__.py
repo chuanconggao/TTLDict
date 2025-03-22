@@ -16,7 +16,7 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
     ) -> None:
         self.__ttl: timedelta = ttl
 
-        self.expiries: dict[_KT, datetime] = {}
+        self.__expiries: dict[_KT, datetime] = {}
 
         # Must be at the end of __init__ as it calls self.update which needs self.__ttl
         super().__init__(other, **kwargs)
@@ -25,7 +25,7 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
         now: datetime = datetime.now(UTC)
 
         expired_keys: list[_KT] = []
-        for key, expiry in self.expiries.items():
+        for key, expiry in self.__expiries.items():
             # As dict is iterated by insert order, the newer ones are iterated later
             if now < expiry:
                 break
@@ -33,17 +33,17 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
             expired_keys.append(key)
 
         for key in expired_keys:
-            del self.expiries[key]
+            del self.__expiries[key]
             del self.data[key]
 
     def cleanup_by_key(self, key: _KT) -> bool:
         now: datetime = datetime.now(UTC)
 
-        if key not in self.expiries:
+        if key not in self.__expiries:
             return False
 
-        if self.expiries[key] <= now:
-            del self.expiries[key]
+        if self.__expiries[key] <= now:
+            del self.__expiries[key]
             del self.data[key]
 
             return False
@@ -69,6 +69,10 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
         self.cleanup_by_key(key)
         return super().__getitem__(key)
 
+    def get_expiry(self, key: _KT) -> datetime | None:
+        self.cleanup_by_key(key)
+        return self.__expiries.get(key)
+
     @override
     def __iter__(self) -> Iterator[_KT]:
         self.cleanup()
@@ -76,12 +80,12 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
 
     @override
     def clear(self) -> None:
-        self.expiries.clear()
+        self.__expiries.clear()
         super().clear()
 
     @override
     def pop(self, key: _KT, default: Any = None) -> Any:
-        if not self.expiries.pop(key):
+        if not self.__expiries.pop(key):
             return default
 
         return super().pop(key, default)
@@ -91,24 +95,28 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
         self.cleanup()
 
         key, value = super().popitem()
-        self.expiries.pop(key)
+        self.__expiries.pop(key)
 
         return (key, value)
 
     @override
     def __delitem__(self, key: _KT) -> None:
-        del self.expiries[key]
+        del self.__expiries[key]
         super().__delitem__(key)
 
     @override
     def __setitem__(self, key: _KT, value: _VT) -> None:
-        self.expiries[key] = datetime.now(UTC) + self.__ttl
+        self.__expiries[key] = datetime.now(UTC) + self.__ttl
         super().__setitem__(key, value)
 
     @override
     def setdefault(self, key: _KT, default: Any = None) -> Any:
-        self.expiries[key] = datetime.now(UTC) + self.__ttl
+        self.__expiries[key] = datetime.now(UTC) + self.__ttl
         return super().setdefault(key, default)
+
+    def renew_expiry(self, key: _KT) -> None:
+        del self.__expiries[key]
+        self.__expiries[key] = datetime.now(UTC) + self.__ttl
 
     @overload
     def update(
@@ -138,23 +146,29 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
         /,
         **kwargs,
     ) -> None:
-        expiry: datetime = datetime.now(UTC) + self.__ttl
+        now: datetime = datetime.now(UTC)
+        expiry: datetime = now + self.__ttl
         other_ttl_dict: bool = isinstance(other, TTLDict)
 
         key: _KT
         value: _VT
         if isinstance(other, Mapping):
             for key, value in other.items():
-                self.expiries[key] = other.expiries[key] if other_ttl_dict else expiry
+                self.__expiries[key] = (
+                    # In rare case, item may have been expired during iteration
+                    # Thus, we set expiry to now (which means it is already expired)
+                    (other.get_expiry(key) or now) if other_ttl_dict
+                    else expiry
+                )
                 self.data[key] = value
         elif isinstance(other, Iterable):
             for key, value in other:
-                self.expiries[key] = expiry
+                self.__expiries[key] = expiry
                 self.data[key] = value
 
         for str_key, value in kwargs.items():
             key = cast("_KT", str_key)
-            self.expiries[key] = expiry
+            self.__expiries[key] = expiry
             self.data[key] = value
 
     @override
