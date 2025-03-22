@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import UserDict
 from collections.abc import ItemsView, Iterable, Iterator, KeysView, Mapping, ValuesView
 from datetime import UTC, datetime, timedelta
-from typing import Any, Self, override
+from typing import Any, Self, cast, overload, override
 
 
 class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
@@ -110,12 +110,33 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
         self.expiries[key] = datetime.now(UTC) + self.__ttl
         return super().setdefault(key, default)
 
+    @overload
+    def update(
+        self,
+        other: Mapping[_KT, _VT],
+        /,
+        **kwargs: _VT,
+    ) -> None: ...
+    @overload
+    def update(
+        self,
+        other: Iterable[tuple[_KT, _VT]],
+        /,
+        **kwargs: _VT,
+    ) -> None: ...
+    @overload
+    def update(
+        self,
+        other: None = None,
+        /,
+        **kwargs: _VT,
+    ) -> None: ...
     @override
     def update(
         self,
-        other: Mapping[_KT, _VT] | Iterable[tuple[_KT, _VT]] | None,
+        other=None,
         /,
-        **kwargs: _VT,
+        **kwargs,
     ) -> None:
         expiry: datetime = datetime.now(UTC) + self.__ttl
         other_ttl_dict: bool = isinstance(other, TTLDict)
@@ -131,7 +152,8 @@ class TTLDict[_KT, _VT](UserDict[_KT, _VT]):
                 self.expiries[key] = expiry
                 self.data[key] = value
 
-        for key, value in kwargs.items():
+        for str_key, value in kwargs.items():
+            key = cast("_KT", str_key)
             self.expiries[key] = expiry
             self.data[key] = value
 
