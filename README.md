@@ -4,7 +4,7 @@ This library provides the same experience of builtin `dict`, plus automatical ti
 
 # How it Works
 
-Different from some other libraries, this one does not require background thread and guarantees that the expired items does not affect results.
+Different from some other libraries, this one does not require background thread and guarantees that the expired items do not affect results.
 
 Note that technically our `TTLDict` class is a subclass of `MutableMapping` instead of `dict`.
 
